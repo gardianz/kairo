@@ -55,11 +55,18 @@ function doSchedule() {
   const dash = makeDashboard("Scheduler", accounts, cfg);
   dash.setAllStatus("menunggu jadwal");
   dash.start();
-  scheduleDaily(cfg, async () => {
-    dash.addLog("-", "mulai run terjadwal", "info");
+  const runNow = async (trigger: string) => {
+    dash.addLog("-", `mulai run (${trigger})`, "info");
     await completeAllQuests(cfg, resolveAccounts(cfg), { dash });
     dash.addLog("-", "run selesai — menunggu jadwal berikutnya", "done");
-  });
+  };
+  scheduleDaily(cfg, () => runNow("jadwal"));
+  if (cfg.runOnStart) {
+    dash.addLog("-", "runOnStart aktif — menjalankan sekarang", "info");
+    void runNow("start");
+  } else {
+    dash.addLog("-", "menunggu jadwal harian (runOnStart: false)", "info");
+  }
 }
 
 async function doTelegram() {

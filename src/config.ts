@@ -46,6 +46,7 @@ const configSchema = z.object({
     .default({ x: false, telegram: false }),
   scheduleCron: z.string().min(1).default("0 9 * * *"),
   jitterMinutes: z.number().int().min(0).default(15),
+  runOnStart: z.boolean().default(true), // run once immediately when scheduler starts
   accountDelayMs: z.number().int().min(0).default(8000),
   maxConcurrent: z.number().int().min(1).default(5), // accounts processed in parallel
   autoRecheckMinutes: z.number().int().min(0).default(0), // re-attempt liquidity-skipped quests every N min (0=off; each retry may lock CC)

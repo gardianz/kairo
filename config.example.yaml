@@ -34,6 +34,7 @@ socialFollow:
 
 scheduleCron: "0 9 * * *" # daily 09:00 local
 jitterMinutes: 15         # random 0..15 min added to start
+runOnStart: true          # run once immediately when scheduler starts (not just wait for cron)
 
 # Daily quests (informational — live progress is read from the API).
 quests:
