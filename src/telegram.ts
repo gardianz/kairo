@@ -10,6 +10,7 @@ import { resolveAccounts } from "./accounts.ts";
 import { checkAccounts } from "./check.ts";
 import { completeAllQuests } from "./run-quests.ts";
 import type { CancelToken } from "./runner.ts";
+import type { Dashboard } from "./dashboard.ts";
 import { logger } from "./reporter.ts";
 
 const HELP = [
@@ -28,7 +29,10 @@ export class TelegramControl {
   private running = false;
   private cancel: CancelToken = { cancelled: false };
 
-  constructor(private cfg: Config) {
+  constructor(
+    private cfg: Config,
+    private dash?: Dashboard,
+  ) {
     if (!cfg.telegram.enabled) throw new Error("telegram disabled in config");
     this.base = `https://api.telegram.org/bot${cfg.telegram.botToken}`;
     this.chatId = cfg.telegram.chatId;
@@ -69,6 +73,7 @@ export class TelegramControl {
 
   private async handle(text: string): Promise<void> {
     const cmd = text.split(/\s+/)[0].toLowerCase().replace(/@.*$/, "");
+    this.dash?.addLog("TG", `perintah ${cmd}`, "info");
     switch (cmd) {
       case "/start":
       case "/help":
@@ -102,6 +107,15 @@ export class TelegramControl {
     await this.send("🔎 Cek akun…");
     const accounts = resolveAccounts(this.cfg);
     const res = await checkAccounts(this.cfg, accounts, { showDashboard: false });
+    // mirror results onto the persistent dashboard cards
+    for (const r of res) {
+      this.dash?.setAcct(r.name, {
+        state: r.ok ? "done" : "error",
+        party: r.partyTail,
+        status: r.ok ? `online ✓ · quest ${r.quests} · ${r.swaps} sw 24h` : `gagal: ${r.error?.slice(0, 30)}`,
+      });
+      this.dash?.addLog(r.name, r.ok ? `cek: quest ${r.quests} · ${r.bal}` : `cek gagal`, r.ok ? "balance" : "error");
+    }
     const lines = res.map((r) =>
       r.ok
         ? `✅ *${r.name}*  quest ${r.quests} · ${r.swaps} sw 24h\n   \`${r.bal}\``
@@ -123,7 +137,8 @@ export class TelegramControl {
     try {
       const sums = await completeAllQuests(this.cfg, accounts, {
         signal: this.cancel,
-        showDashboard: false,
+        dash: this.dash,
+        showDashboard: this.dash ? undefined : false,
       });
       const lines = sums.map((s) => {
         const st = s.aborted ? `⛔ ${s.aborted}` : s.questsRemaining.length ? "⚠️ partial" : "✅ done";

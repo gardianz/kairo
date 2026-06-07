@@ -10,7 +10,16 @@ import { checkAccounts } from "./check.ts";
 import { completeAllQuests } from "./run-quests.ts";
 import { scheduleDaily } from "./scheduler.ts";
 import { TelegramControl } from "./telegram.ts";
+import { Dashboard } from "./dashboard.ts";
 import { logger } from "./reporter.ts";
+
+function makeDashboard(title: string, accounts: { name: string; proxy?: string }[], cfg: any) {
+  return new Dashboard(title, accounts.map((a) => a.name), {
+    swapAmt: cfg.swapAmountCC,
+    proxied: accounts.filter((a) => a.proxy).length,
+    nextRunCron: cfg.scheduleCron,
+  });
+}
 
 function header() {
   console.log("\n\x1b[1m╔══════════════════════════════╗");
@@ -42,10 +51,15 @@ async function doQuests() {
 
 function doSchedule() {
   const cfg = loadConfig();
+  const accounts = resolveAccounts(cfg);
+  const dash = makeDashboard("Scheduler", accounts, cfg);
+  dash.setAllStatus("menunggu jadwal");
+  dash.start();
   scheduleDaily(cfg, async () => {
-    await completeAllQuests(cfg, resolveAccounts(cfg));
+    dash.addLog("-", "mulai run terjadwal", "info");
+    await completeAllQuests(cfg, resolveAccounts(cfg), { dash });
+    dash.addLog("-", "run selesai — menunggu jadwal berikutnya", "done");
   });
-  console.log("Scheduler running. Ctrl+C to stop.");
 }
 
 async function doTelegram() {
@@ -54,8 +68,11 @@ async function doTelegram() {
     console.error("Telegram disabled. Set telegram.enabled/botToken/chatId in config.yaml.");
     process.exit(1);
   }
-  console.log("Telegram control running. Send /help to your bot. Ctrl+C to stop.");
-  await new TelegramControl(cfg).start();
+  const accounts = resolveAccounts(cfg);
+  const dash = makeDashboard("Telegram", accounts, cfg);
+  dash.setAllStatus("idle — kirim /run di Telegram");
+  dash.start();
+  await new TelegramControl(cfg, dash).start();
 }
 
 async function menu() {

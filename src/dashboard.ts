@@ -109,6 +109,17 @@ export class Dashboard {
     if (a) Object.assign(a, u);
   }
 
+  setAllStatus(status: string, state: AcctView["state"] = "idle"): void {
+    for (const a of this.accts.values()) {
+      a.status = status;
+      a.state = state;
+    }
+  }
+
+  setTitle(title: string): void {
+    this.title = title;
+  }
+
   addLog(label: string, msg: string, kind: Kind): void {
     const t = new Date().toTimeString().slice(0, 8);
     this.log.push({ t, label, msg, kind });

@@ -18,18 +18,22 @@ const questName = (id: string) => QUEST_NAME[id] ?? id;
 export async function completeAllQuests(
   cfg: Config,
   accounts: ResolvedAccount[],
-  opts: { signal?: CancelToken; showDashboard?: boolean } = {},
+  opts: { signal?: CancelToken; showDashboard?: boolean; dash?: Dashboard } = {},
 ): Promise<RunSummary[]> {
   const proxied = accounts.filter((a) => a.proxy).length;
+  // Use a caller-owned dashboard (persistent scheduler/telegram) if given;
+  // otherwise create an ephemeral one for this run (unless disabled).
+  const ownDash = !opts.dash && opts.showDashboard !== false;
   const dash =
-    opts.showDashboard === false
-      ? null
-      : new Dashboard("Auto Task", accounts.map((a) => a.name), {
+    opts.dash ??
+    (ownDash
+      ? new Dashboard("Auto Task", accounts.map((a) => a.name), {
           swapAmt: cfg.swapAmountCC,
           proxied,
           nextRunCron: cfg.scheduleCron,
-        });
-  dash?.start();
+        })
+      : null);
+  if (ownDash) dash?.start();
 
   const byName = new Map(accounts.map((a) => [a.name, a]));
   const run1 = (acc: ResolvedAccount) =>
@@ -68,7 +72,7 @@ export async function completeAllQuests(
     }
   }
 
-  dash?.stop();
+  if (ownDash) dash?.stop();
 
   // Detect quests that were liquidity-skipped on a PREVIOUS run but are now
   // completed (pool refilled) and send a one-time "pool terisi" alert.
