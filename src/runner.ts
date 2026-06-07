@@ -8,7 +8,7 @@ import type { AcctView, Kind } from "./dashboard.ts";
 import { Session } from "./session.ts";
 import { plan } from "./quest-engine.ts";
 import { checkAction, type RunCounters } from "./safety.ts";
-import { executeSwap, retry, isNonRetryable, parseLiquidity } from "./swap.ts";
+import { executeSwap, executePairSwap, retry, isNonRetryable, parseLiquidity } from "./swap.ts";
 import { logger } from "./reporter.ts";
 
 export interface AccountHooks {
@@ -136,9 +136,11 @@ export async function runAccount(
         summary.aborted = "stopped by user";
         break;
       }
-      const remaining = plan(quests, { swapAmountCC: cfg.swapAmountCC, roundTrip: cfg.roundTrip }).filter(
-        (a) => !skipQuests.has(a.questId),
-      );
+      const remaining = plan(quests, {
+        swapAmountCC: cfg.swapAmountCC,
+        pairSwapCC: cfg.pairSwapCC,
+        roundTrip: cfg.roundTrip,
+      }).filter((a) => !skipQuests.has(a.questId));
       if (remaining.length === 0) break; // all quests done (or rest un-completable) -> stop
       const action = remaining[0];
 
@@ -176,7 +178,9 @@ export async function runAccount(
 
       up({ state: "busy", status: `swap ${lbl(action.from)} → ${lbl(action.to)} ${action.amountCC} CC` });
       summary.swapsAttempted += 1;
-      const res = await retry(() => executeSwap(session, action.from, action.to, action.amountCC));
+      const res = action.pair
+        ? await executePairSwap(session, action.from, action.to, action.amountCC)
+        : await retry(() => executeSwap(session, action.from, action.to, action.amountCC));
       counters.swapCount += 1;
       counters.spentCC += action.amountCC;
       summary.spentCC = counters.spentCC;

@@ -4,6 +4,7 @@ import type { Action, QuestActivity, Token } from "./types.ts";
 
 export interface PlanCfg {
   swapAmountCC: number;
+  pairSwapCC?: number; // tiny amount for pair quests (no minimum); defaults to 0.1
   roundTrip: boolean;
   // neutral pair used for generic "swap count" quests
   countPairFrom?: Token;
@@ -20,12 +21,14 @@ export function plan(quests: QuestActivity[], cfg: PlanCfg): Action[] {
 
     if (q.meta?.pair && q.meta.pair.length === 2) {
       const [a, b] = q.meta.pair as [Token, Token];
+      // Pair quests have no minimum amount → tiny swap (pool-sized), no round-trip.
       actions.push({
         questId: q.id,
         from: a,
         to: b,
-        amountCC: cfg.swapAmountCC,
-        roundTripBack: cfg.roundTrip,
+        amountCC: cfg.pairSwapCC ?? 0.1,
+        roundTripBack: false,
+        pair: true,
       });
       continue;
     }

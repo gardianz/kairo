@@ -6,7 +6,8 @@ apiBase: "https://api.kairo.ag"
 # Format: http://user:pass@host:port  or  http://host:port
 # proxy: "http://user:pass@1.2.3.4:8080"
 
-swapAmountCC: 11          # value per swap (>= quest threshold 10, +1 buffer so never borderline)
+swapAmountCC: 11          # value per swap for the 5-swap quest (>= threshold 10)
+pairSwapCC: 0.1           # tiny swap for pair quests (CC↔CBTC/USDCx have NO minimum)
 roundTrip: true           # swap back after each swap to recover holdings
 dailySpendCapCC: 100      # max total CC-value swapped per run per account
 minBalanceFloorCC: 0      # don't swap if CC would drop below this
@@ -32,7 +33,7 @@ autoRecheckMax: 6         # max recheck rounds
 
 swapReserveCC: 1          # keep this much unlocked CC above swap amount (fee buffer)
 consolidateToCC: true     # at end of run, swap leftover non-CC tokens back to CC
-consolidateOnlyWhenQuestsDone: true  # only consolidate once all quests complete
+consolidateOnlyWhenQuestsDone: false # false = always sweep leftovers (even if a quest is stuck)
 waitForUnlock: true       # wait for escrow to release if unlocked balance too low
 unlockMaxWaitMs: 900000   # max wait per swap (15 min)
 unlockPollMs: 20000       # balance poll interval while waiting

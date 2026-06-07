@@ -56,6 +56,27 @@ export function parseLiquidity(error?: string): { required: number; available: n
   return m ? { required: Number(m[1]), available: Number(m[2]) } : null;
 }
 
+// Complete a pair quest cheaply: pair quests have NO minimum amount, so a tiny
+// swap that fits the (possibly dry) pool checks the quest off. Probe small, and
+// if the pool is too small, size the swap to ~70% of available liquidity.
+export async function executePairSwap(
+  session: Session,
+  from: Token,
+  to: Token,
+  tryCC: number,
+): Promise<SwapResult> {
+  const first = await executeSwap(session, from, to, tryCC);
+  if (first.ok || !isNonRetryable(first.error)) return first;
+  // pool too small for tryCC — read available and size down
+  const liq = parseLiquidity(first.error);
+  if (!liq || liq.available <= 0) return first;
+  const quote = Number(await session.api.getQuote(from, to)); // `from` per `to`
+  if (!quote || !isFinite(quote)) return first;
+  const sized = Number((liq.available * quote * 0.7).toFixed(6)); // CC to spend
+  if (sized <= 0) return first;
+  return executeSwap(session, from, to, sized);
+}
+
 export async function retry<T extends { ok: boolean; error?: string }>(
   fn: () => Promise<T>,
   retries = 2,

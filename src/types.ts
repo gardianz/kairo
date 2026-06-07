@@ -80,6 +80,7 @@ export interface Action {
   to: Token;
   amountCC: number; // CC-equivalent value, for caps/thresholds
   roundTripBack: boolean;
+  pair?: boolean; // pair quest: tiny pool-sized swap, no minimum amount
 }
 
 // Result of one swap submission.

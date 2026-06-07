@@ -29,6 +29,7 @@ const configSchema = z.object({
   apiBase: z.string().url().default("https://api.kairo.ag"),
   proxy: z.string().optional(), // global proxy (http://user:pass@host:port); per-account overrides
   swapAmountCC: z.number().positive().default(10),
+  pairSwapCC: z.number().positive().default(0.1), // tiny swap for pair quests (no min)
   roundTrip: z.boolean().default(true),
   dailySpendCapCC: z.number().positive().default(100),
   minBalanceFloorCC: z.number().min(0).default(0),
@@ -36,7 +37,7 @@ const configSchema = z.object({
   swapDelayMs: z.number().int().min(0).default(4000),
   swapReserveCC: z.number().min(0).default(1), // extra unlocked buffer for fees
   consolidateToCC: z.boolean().default(true), // swap leftover non-CC back to CC at end
-  consolidateOnlyWhenQuestsDone: z.boolean().default(true),
+  consolidateOnlyWhenQuestsDone: z.boolean().default(false), // false = always sweep leftovers
   dustMinUnlocked: z.number().min(0).default(0.00000001),
   waitForUnlock: z.boolean().default(true),
   unlockMaxWaitMs: z.number().int().min(0).default(900000), // 15 min
