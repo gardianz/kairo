@@ -1,0 +1,9 @@
+[
+  {
+    "name": "main",
+    "password": "WALLET_PASSWORD_HERE",
+    "bundle": {
+      "_comment": "Paste the bundle object copied by the extension's 'Copy account JSON' button. That button gives you this whole {name,password,bundle} entry ready to paste into the array."
+    }
+  }
+]

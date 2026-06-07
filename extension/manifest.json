@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Kairo Session Exporter",
+  "version": "1.0.0",
+  "description": "One-click export of your Kairo session to the local quest bot.",
+  "permissions": ["scripting", "activeTab", "clipboardWrite"],
+  "host_permissions": [
+    "https://kairo.ag/*",
+    "http://127.0.0.1/*",
+    "http://localhost/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Export Kairo Session"
+  }
+}

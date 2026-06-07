@@ -1,0 +1,42 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body { width: 300px; font-family: system-ui, sans-serif; padding: 12px; background: #111; color: #eee; }
+      h1 { font-size: 15px; margin: 0 0 8px; }
+      .row { margin: 8px 0; }
+      input { width: 100%; box-sizing: border-box; padding: 6px; background: #1c1c1c; color: #eee; border: 1px solid #333; border-radius: 6px; }
+      button { width: 100%; padding: 8px; margin-top: 6px; border: 0; border-radius: 6px; cursor: pointer; font-weight: 600; }
+      .primary { background: #e11d2a; color: #fff; }
+      .ghost { background: #2a2a2a; color: #ddd; }
+      .muted { color: #888; font-size: 11px; }
+      #status { font-size: 12px; margin-top: 8px; white-space: pre-wrap; }
+      .ok { color: #4ade80; } .err { color: #f87171; }
+    </style>
+  </head>
+  <body>
+    <h1>Kairo Session Exporter</h1>
+    <div class="muted">Open a logged-in kairo.ag tab, then:</div>
+
+    <button id="grab" class="primary">1. Grab session from tab</button>
+    <div id="party" class="muted"></div>
+
+    <div class="row">
+      <input id="name" placeholder="account name (e.g. main)" />
+    </div>
+    <div class="row">
+      <input id="password" type="password" placeholder="wallet password" />
+    </div>
+
+    <button id="copyacc" class="primary" disabled>Copy account JSON (for accounts.json / VPS)</button>
+    <button id="save" class="ghost" disabled>Save to local bot (receiver)</button>
+    <button id="copy" class="ghost" disabled>Copy raw bundle</button>
+    <button id="download" class="ghost" disabled>Download bundle</button>
+
+    <div class="row muted">Local receiver: <input id="endpoint" value="http://127.0.0.1:8787" /></div>
+    <div id="status"></div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

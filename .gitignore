@@ -1,0 +1,17 @@
+node_modules/
+dist/
+logs/
+*.log
+config.yaml
+secret/
+sessions/
+user-data/
+discovery/bodies/
+discovery/app.js
+discovery/chunks/
+discovery/network.jsonl
+discovery/endpoints.txt
+discovery/swap/
+*.tmp
+accounts.json
+.claude/

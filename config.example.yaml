@@ -1,0 +1,50 @@
+# Copy to config.yaml and edit. config.yaml is gitignored.
+apiBase: "https://api.kairo.ag"
+
+swapAmountCC: 11          # value per swap (>= quest threshold 10, +1 buffer so never borderline)
+roundTrip: true           # swap back after each swap to recover holdings
+dailySpendCapCC: 100      # max total CC-value swapped per run per account
+minBalanceFloorCC: 0      # don't swap if CC would drop below this
+maxSwapsPerRun: 20        # hard cap on swaps per run
+swapDelayMs: 4000         # delay between swaps (settlement + rate limit)
+accountDelayMs: 8000      # (unused in concurrent mode; kept for reference)
+maxConcurrent: 5          # how many accounts to process in parallel
+
+swapReserveCC: 1          # keep this much unlocked CC above swap amount (fee buffer)
+consolidateToCC: true     # at end of run, swap leftover non-CC tokens back to CC
+consolidateOnlyWhenQuestsDone: true  # only consolidate once all quests complete
+waitForUnlock: true       # wait for escrow to release if unlocked balance too low
+unlockMaxWaitMs: 900000   # max wait per swap (15 min)
+unlockPollMs: 20000       # balance poll interval while waiting
+
+# Auto-complete onboarding follow quests (just marks follows=true, no real follow).
+socialFollow:
+  x: true
+  telegram: true
+
+scheduleCron: "0 9 * * *" # daily 09:00 local
+jitterMinutes: 15         # random 0..15 min added to start
+
+# Daily quests (informational — live progress is read from the API).
+quests:
+  - { id: min_swap_count_and_value, type: swap-count, count: 5, minValueCC: 10 }
+  - { id: pair_cc_cbtc, type: swap-pair, pair: ["Amulet", "CBTC"] }
+  - { id: pair_cc_usdcx, type: swap-pair, pair: ["Amulet", "USDCx"] }
+
+# Accounts — two options:
+#
+# A) Inline accounts.json (recommended for VPS): one file with bundle+password
+#    per account. Grab each with the extension's "Copy account JSON" button and
+#    paste into accounts.json. Then set:
+accountsFile: "accounts.json"
+#
+# B) File-based (local): bundle file + password file per account.
+accounts: []
+#  - name: main
+#    bundle: "sessions/main.json"
+#    passwordFile: "secret/main.pw"
+
+telegram:
+  enabled: false
+  # botToken: "123:abc"
+  # chatId: "123456"
