@@ -33,11 +33,12 @@ export function formatBalances(balances: Balance[], label: (t: Token) => string)
   return parts.join("  ") || "empty";
 }
 
-// Card-style amount: big -> trimmed decimal, tiny -> scientific (7.25e-6).
+// Card-style amount: always plain decimal (no scientific), trailing zeros trimmed.
+// e.g. 9.0032 -> "9.0032", 0.0000132 -> "0.0000132".
 export function fmtCardAmt(n: number): string {
   if (n === 0) return "0";
-  if (n >= 0.001) return n.toFixed(4).replace(/\.?0+$/, "");
-  return n.toExponential(2);
+  const s = n >= 1 ? n.toFixed(4) : n.toFixed(12);
+  return s.replace(/0+$/, "").replace(/\.$/, "");
 }
 
 // One token's balance for a card: "12.71(+2L)" / "7.25e-6".
