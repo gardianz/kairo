@@ -5,7 +5,15 @@ import type { RunSummary } from "./types.ts";
 import { Dashboard } from "./dashboard.ts";
 import { runAccount, type CancelToken } from "./runner.ts";
 import { runPool } from "./pool.ts";
-import { report } from "./reporter.ts";
+import { report, sendTelegram } from "./reporter.ts";
+import { loadSkipMap, saveSkipMap } from "./state.ts";
+
+const QUEST_NAME: Record<string, string> = {
+  pair_cc_usdcx: "Swap CC ↔ USDCx",
+  pair_cc_cbtc: "Swap CC ↔ CBTC",
+  min_swap_count_and_value: "5 swap harian",
+};
+const questName = (id: string) => QUEST_NAME[id] ?? id;
 
 export async function completeAllQuests(
   cfg: Config,
@@ -61,6 +69,20 @@ export async function completeAllQuests(
   }
 
   dash?.stop();
+
+  // Detect quests that were liquidity-skipped on a PREVIOUS run but are now
+  // completed (pool refilled) and send a one-time "pool terisi" alert.
+  const prev = loadSkipMap();
+  const nextMap: Record<string, string[]> = {};
+  for (const s of summaries) {
+    const recovered = (prev[s.account] ?? []).filter((id) => s.questsCompleted.includes(id));
+    for (const id of recovered) {
+      await sendTelegram(cfg, `✅ *${s.account}*: pool terisi — *${questName(id)}* akhirnya selesai 🎉`);
+    }
+    nextMap[s.account] = s.liquiditySkipped;
+  }
+  saveSkipMap(nextMap);
+
   for (const s of summaries) await report(cfg, s); // file log + telegram
   return summaries;
 }

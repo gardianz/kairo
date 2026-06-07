@@ -15,3 +15,4 @@ discovery/swap/
 *.tmp
 accounts.json
 .claude/
+state/
