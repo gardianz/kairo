@@ -118,6 +118,7 @@ export async function runAccount(
     let balances = await session.api.getBalances(session.partyId);
     let consecutiveFails = 0;
     const skipQuests = new Set<string>(); // quests that can't complete now (e.g. no liquidity)
+    const liqAttempts = new Map<string, number>(); // per-quest liquidity retry counter
     const qv = questView(quests);
     up({ ...qv, ...balView(balances), status: "memproses quest" });
     log(
@@ -203,14 +204,26 @@ export async function runAccount(
         swFail += 1;
         summary.errors.push(`${action.from}->${action.to}: ${res.error}`);
         if (isNonRetryable(res.error)) {
-          // e.g. DEX out of USDCx liquidity — skip this quest so we stop locking CC.
-          skipQuests.add(action.questId);
-          consecutiveFails = 0;
+          consecutiveFails = 0; // liquidity is not a real failure
           const liq = parseLiquidity(res.error);
           const detail = liq
             ? `pool ${lbl(action.to)} ${liq.available} < butuh ${liq.required}`
             : `liquiditas ${lbl(action.to)} kurang`;
-          log(`swap ${lbl(action.from)} → ${lbl(action.to)} dilewati: ${detail} (coba lagi run berikutnya)`, "error");
+          const attempts = (liqAttempts.get(action.questId) ?? 0) + 1;
+          liqAttempts.set(action.questId, attempts);
+          const capped = cfg.liquidityMaxAttempts > 0 && attempts >= cfg.liquidityMaxAttempts;
+          if (cfg.liquidityRetry && !capped) {
+            // Keep trying until the pool refills. Escrow unlock (next iteration's
+            // waitForUnlock) paces retries; add a small extra wait too.
+            up({ state: "wait", status: `${detail} — coba lagi (percobaan ${attempts})` });
+            log(`${detail} — tunggu ${cfg.liquidityRetryMinutes} mnt, coba lagi (percobaan ${attempts})`, "info");
+            if (cfg.liquidityRetryMinutes > 0)
+              await new Promise((r) => setTimeout(r, cfg.liquidityRetryMinutes * 60_000));
+            // do NOT skip — loop re-plans the same quest and retries
+          } else {
+            skipQuests.add(action.questId);
+            log(`swap ${lbl(action.from)} → ${lbl(action.to)} dilewati: ${detail}`, "error");
+          }
         } else {
           consecutiveFails += 1;
           log(`swap ${lbl(action.from)} → ${lbl(action.to)} gagal: ${String(res.error).slice(0, 30)}`, "error");

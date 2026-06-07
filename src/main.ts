@@ -82,7 +82,7 @@ async function doTelegram() {
   await new TelegramControl(cfg, dash).start();
 }
 
-async function menu() {
+async function menu(): Promise<boolean> {
   header();
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   for (;;) {
@@ -97,33 +97,39 @@ async function menu() {
     else if (ans === "3") {
       rl.close();
       doSchedule();
-      return;
+      return true; // long-running: keep process alive
     } else if (ans === "4") {
       rl.close();
-      await doTelegram();
-      return;
+      await doTelegram(); // never returns
+      return true;
     } else if (ans === "5" || ans.toLowerCase() === "q") {
       rl.close();
       console.log("bye");
-      return;
+      return false;
     } else console.log("pilihan tidak valid");
   }
 }
 
 async function main() {
+  let keepAlive = false;
   try {
     if (process.argv.includes("--check") || process.argv.includes("--once")) await doCheck();
     else if (process.argv.includes("--quests")) await doQuests();
-    else if (process.argv.includes("--schedule")) doSchedule();
-    else if (process.argv.includes("--telegram")) await doTelegram();
-    else await menu();
+    else if (process.argv.includes("--schedule")) {
+      doSchedule();
+      keepAlive = true;
+    } else if (process.argv.includes("--telegram")) {
+      keepAlive = true;
+      await doTelegram();
+    } else {
+      keepAlive = await menu();
+    }
   } catch (err) {
     logger.error({ err }, "fatal");
     console.error("\n❌", err instanceof Error ? err.message : err);
     process.exit(1);
   }
-  const longRunning = process.argv.includes("--schedule") || process.argv.includes("--telegram");
-  if (!longRunning) process.exit(0);
+  if (!keepAlive) process.exit(0);
 }
 
 main();
