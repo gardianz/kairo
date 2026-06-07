@@ -12,6 +12,7 @@
     "check": "tsx src/main.ts --check",
     "quests": "tsx src/main.ts --quests",
     "schedule": "tsx src/main.ts --schedule",
+    "telegram": "tsx src/main.ts --telegram",
     "add-account": "tsx tools/add-account.ts",
     "receiver": "tsx tools/receiver.ts"
   },

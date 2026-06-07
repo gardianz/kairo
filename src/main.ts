@@ -9,6 +9,7 @@ import { resolveAccounts } from "./accounts.ts";
 import { checkAccounts } from "./check.ts";
 import { completeAllQuests } from "./run-quests.ts";
 import { scheduleDaily } from "./scheduler.ts";
+import { TelegramControl } from "./telegram.ts";
 import { logger } from "./reporter.ts";
 
 function header() {
@@ -47,6 +48,16 @@ function doSchedule() {
   console.log("Scheduler running. Ctrl+C to stop.");
 }
 
+async function doTelegram() {
+  const cfg = loadConfig();
+  if (!cfg.telegram.enabled) {
+    console.error("Telegram disabled. Set telegram.enabled/botToken/chatId in config.yaml.");
+    process.exit(1);
+  }
+  console.log("Telegram control running. Send /help to your bot. Ctrl+C to stop.");
+  await new TelegramControl(cfg).start();
+}
+
 async function menu() {
   header();
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -54,15 +65,20 @@ async function menu() {
     console.log("\n  1) Cek akun (saldo + status quest)");
     console.log("  2) Selesaikan semua quest (paralel)");
     console.log("  3) Jalankan scheduler harian");
-    console.log("  4) Keluar");
-    const ans = (await rl.question("Pilih [1-4]: ")).trim();
+    console.log("  4) Jalankan kontrol Telegram");
+    console.log("  5) Keluar");
+    const ans = (await rl.question("Pilih [1-5]: ")).trim();
     if (ans === "1") await doCheck();
     else if (ans === "2") await doQuests();
     else if (ans === "3") {
       rl.close();
       doSchedule();
       return;
-    } else if (ans === "4" || ans.toLowerCase() === "q") {
+    } else if (ans === "4") {
+      rl.close();
+      await doTelegram();
+      return;
+    } else if (ans === "5" || ans.toLowerCase() === "q") {
       rl.close();
       console.log("bye");
       return;
@@ -75,13 +91,15 @@ async function main() {
     if (process.argv.includes("--check") || process.argv.includes("--once")) await doCheck();
     else if (process.argv.includes("--quests")) await doQuests();
     else if (process.argv.includes("--schedule")) doSchedule();
+    else if (process.argv.includes("--telegram")) await doTelegram();
     else await menu();
   } catch (err) {
     logger.error({ err }, "fatal");
     console.error("\n❌", err instanceof Error ? err.message : err);
     process.exit(1);
   }
-  if (!process.argv.includes("--schedule")) process.exit(0);
+  const longRunning = process.argv.includes("--schedule") || process.argv.includes("--telegram");
+  if (!longRunning) process.exit(0);
 }
 
 main();

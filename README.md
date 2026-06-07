@@ -67,6 +67,23 @@ npm run schedule   # daily scheduler (cron + jitter), concurrent accounts
 All multi-account work runs in parallel (`maxConcurrent` in config) with a live
 dashboard; detailed logs go to `logs/bot.log`.
 
+### Telegram control (two-way)
+```bash
+npm run telegram   # long-polls for commands + pushes notifications
+```
+Commands (only from your `chatId`): `/help`, `/status`, `/check` (balances +
+quest status), `/run` (complete quests, concurrent), `/stop` (cancel job).
+Per-account run summaries are pushed automatically.
+
+Setup: create a bot via **@BotFather** for the token; get your `chatId` from
+**@userinfobot** (or `https://api.telegram.org/bot<TOKEN>/getUpdates`). Then:
+```yaml
+telegram:
+  enabled: true
+  botToken: "123456:ABC..."
+  chatId: "123456789"
+```
+
 ## Safety
 
 - `secret/`, `sessions/`, `config.yaml`, `user-data/` are gitignored. A session

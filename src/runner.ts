@@ -15,6 +15,11 @@ export interface AccountHooks {
   update?: (u: Partial<Row>) => void;
 }
 
+// Cooperative cancellation token (set cancelled=true to stop a running job).
+export interface CancelToken {
+  cancelled: boolean;
+}
+
 function ccBalanceOf(balances: { token: Token; unlocked: number }[]): number {
   return unlockedOf(balances, "Amulet");
 }
@@ -47,6 +52,7 @@ export async function runAccount(
   cfg: Config,
   acc: ResolvedAccount,
   hooks: AccountHooks = {},
+  signal?: CancelToken,
 ): Promise<RunSummary> {
   const up = (u: Partial<Row>) => hooks.update?.(u);
   const questStr = (qs: { status: string }[]) =>
@@ -104,6 +110,10 @@ export async function runAccount(
     // is unfinished and stops as soon as it completes (handles back-swaps that
     // count, and re-tries quests left short by failed swaps).
     while (true) {
+      if (signal?.cancelled) {
+        summary.aborted = "stopped by user";
+        break;
+      }
       const remaining = plan(quests, { swapAmountCC: cfg.swapAmountCC, roundTrip: cfg.roundTrip });
       if (remaining.length === 0) break; // all quests done -> stop
       const action = remaining[0];

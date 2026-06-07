@@ -16,13 +16,17 @@ export interface CheckResult {
   error?: string;
 }
 
-export async function checkAccounts(cfg: Config, accounts: ResolvedAccount[]): Promise<CheckResult[]> {
-  const dash = new Dashboard("Account check", accounts.map((a) => a.name));
-  dash.start();
+export async function checkAccounts(
+  cfg: Config,
+  accounts: ResolvedAccount[],
+  opts: { showDashboard?: boolean } = {},
+): Promise<CheckResult[]> {
+  const dash = opts.showDashboard === false ? null : new Dashboard("Account check", accounts.map((a) => a.name));
+  dash?.start();
 
   const results = await runPool(accounts, cfg.maxConcurrent, async (acc) => {
     const r: CheckResult = { name: acc.name, ok: false, partyTail: "", bal: "-", quests: "-" };
-    dash.set(acc.name, { state: "busy", phase: "logging in", party: acc.bundle.partyId?.slice(-6) ?? "" });
+    dash?.set(acc.name, { state: "busy", phase: "logging in", party: acc.bundle.partyId?.slice(-6) ?? "" });
     try {
       const session = Session.create(cfg.apiBase, acc.bundle, acc.password, acc.persist);
       r.partyTail = session.partyId.slice(-6);
@@ -36,7 +40,7 @@ export async function checkAccounts(cfg: Config, accounts: ResolvedAccount[]): P
       const done = quests.filter((q) => q.status === "completed").length;
       r.quests = `${done}/${quests.length}`;
       r.ok = true;
-      dash.set(acc.name, {
+      dash?.set(acc.name, {
         state: "done",
         party: r.partyTail,
         phase: `online ✓  ($${swaps.volumeUsd.toFixed(2)} vol 24h)`,
@@ -46,11 +50,11 @@ export async function checkAccounts(cfg: Config, accounts: ResolvedAccount[]): P
       });
     } catch (err) {
       r.error = err instanceof Error ? err.message : String(err);
-      dash.set(acc.name, { state: "error", phase: "login failed", note: r.error.slice(0, 28) });
+      dash?.set(acc.name, { state: "error", phase: "login failed", note: r.error.slice(0, 28) });
     }
     return r;
   });
 
-  dash.stop();
+  dash?.stop();
   return results;
 }
