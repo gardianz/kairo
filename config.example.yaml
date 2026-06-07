@@ -14,19 +14,21 @@ maxSwapsPerRun: 20        # hard cap on swaps per run
 swapDelayMs: 4000         # delay between swaps (settlement + rate limit)
 accountDelayMs: 8000      # (unused in concurrent mode; kept for reference)
 maxConcurrent: 5          # how many accounts to process in parallel
-# Re-attempt quests skipped due to DEX liquidity (e.g. USDCx pool empty) every
-# N minutes, in case the pool refilled. 0 = off. WARNING: each retry attempt
-# may lock ~swapAmount CC in an escrow for ~13 min if the pool is still dry.
-autoRecheckMinutes: 0
-autoRecheckMax: 6         # max recheck rounds
-
-# Keep retrying a swap even when the DEX pool is empty, until the quest finishes.
-# Each attempt may lock CC briefly (returned on escrow unlock). The daily spend
-# cap above still bounds how much one run will attempt; the scheduler continues
-# on the next run. Set liquidityMaxAttempts > 0 to cap retries per run.
+# --- Liquidity handling: pick ONE strategy ---
+#
+# A) liquidityRetry (recommended): keep retrying within the SAME run until the
+#    quest finishes. Each attempt may lock CC briefly (returned on escrow
+#    unlock). dailySpendCapCC bounds one run; the scheduler continues next run.
 liquidityRetry: true
 liquidityRetryMinutes: 10
 liquidityMaxAttempts: 0   # 0 = unlimited within a run
+#
+# B) autoRecheck: retry BETWEEN runs instead. Only fires for quests that were
+#    SKIPPED — i.e. when liquidityRetry is false (or liquidityMaxAttempts hit).
+#    With liquidityRetry: true + unlimited, nothing is skipped, so this stays idle.
+#    To use B: set liquidityRetry: false and autoRecheckMinutes > 0.
+autoRecheckMinutes: 0     # 0 = off
+autoRecheckMax: 6         # max recheck rounds
 
 swapReserveCC: 1          # keep this much unlocked CC above swap amount (fee buffer)
 consolidateToCC: true     # at end of run, swap leftover non-CC tokens back to CC
