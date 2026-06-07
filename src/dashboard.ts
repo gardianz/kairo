@@ -139,35 +139,43 @@ export class Dashboard {
       const diff = Math.max(0, nr.at.getTime() - Date.now());
       const h = Math.floor(diff / 3600000);
       const mm = Math.floor((diff % 3600000) / 60000);
-      countdown = ` • next ${nr.label} in ${h}h${mm}m`;
+      countdown = ` • run berikutnya ${nr.label} (dalam ${h} jam ${mm} menit)`;
     }
 
     // header
-    lines.push(`${C.bold}${C.magenta}        KAIRO BOT V1 • ${this.title.toUpperCase()}${C.reset}`);
+    lines.push(`${C.bold}${C.magenta}══════════ KAIRO BOT — ${this.title} ══════════${C.reset}`);
     lines.push(
-      `${C.dim}   ${this.accts.size} acct • ${C.green}LIVE${C.reset}${C.dim} • ${this.opts.proxied} proxied • ${clock}${countdown}${C.reset}`,
+      `${C.dim}${this.accts.size} akun • ${C.reset}${C.green}AKTIF${C.reset}${C.dim} • ${this.opts.proxied} pakai proxy • nilai swap ${this.opts.swapAmt} CC • jam ${clock}${countdown}${C.reset}`,
     );
-    lines.push("");
+
+    // word maps
+    const questWord = (v: "Y" | "N" | "-") =>
+      v === "Y" ? `${C.green}selesai ✓${C.reset}` : v === "N" ? `${C.red}belum ✗${C.reset}` : `${C.gray}—${C.reset}`;
+    const pad = (s: string, n: number) => (s.length >= n ? s : s + " ".repeat(n - s.length));
 
     // cards
     for (const a of this.accts.values()) {
       const sc = STATE_COLOR[a.state];
-      const head = `─ ${C.bold}${a.name}${C.reset} ${C.dim}@${this.opts.swapAmt}${a.party ? "  " + a.party : ""}${C.reset} `;
-      lines.push(head + C.dim + "─".repeat(Math.max(0, 46 - a.name.length - String(this.opts.swapAmt).length)) + C.reset);
-      const yn = (v: "Y" | "N" | "-") => (v === "Y" ? `${C.green}Y${C.reset}` : v === "N" ? `${C.red}N${C.reset}` : `${C.gray}-${C.reset}`);
-      lines.push(
-        `  CNT ${a.cnt}   CB ${yn(a.cb)}  UX ${yn(a.ux)}    ${C.dim}sw${C.reset} ${a.swOk}/${a.swFail}`,
-      );
-      lines.push(`  ${C.cyan}CC${C.reset} ${a.cc}   ${C.cyan}UX${C.reset} ${a.uxBal}   ${C.cyan}CB${C.reset} ${a.cbBal}`);
-      lines.push(`  ${sc}> ${a.status}${C.reset}`);
+      lines.push("");
+      lines.push(`${C.bold}┌ Akun: ${a.name}${C.reset}${a.party ? `${C.dim}   (dompet …${a.party})${C.reset}` : ""}`);
+      lines.push(`${C.dim}│${C.reset} Quest harian:`);
+      lines.push(`${C.dim}│${C.reset}   ${pad("5 swap (nilai ≥10 CC)", 24)}: ${a.cnt === "-" ? `${C.gray}—${C.reset}` : a.cnt + (a.cnt.split("/")[0] === a.cnt.split("/")[1] ? ` ${C.green}✓${C.reset}` : "")}`);
+      lines.push(`${C.dim}│${C.reset}   ${pad("Swap CC ↔ CBTC", 24)}: ${questWord(a.cb)}`);
+      lines.push(`${C.dim}│${C.reset}   ${pad("Swap CC ↔ USDCx", 24)}: ${questWord(a.ux)}`);
+      lines.push(`${C.dim}│${C.reset} Saldo:`);
+      lines.push(`${C.dim}│${C.reset}   ${C.cyan}${pad("CC (Canton Coin)", 18)}${C.reset}: ${a.cc}`);
+      lines.push(`${C.dim}│${C.reset}   ${C.cyan}${pad("USDCx", 18)}${C.reset}: ${a.uxBal}`);
+      lines.push(`${C.dim}│${C.reset}   ${C.cyan}${pad("CBTC", 18)}${C.reset}: ${a.cbBal}`);
+      lines.push(`${C.dim}│${C.reset} Swap sesi ini: ${C.green}${a.swOk} berhasil${C.reset}, ${a.swFail > 0 ? C.red : C.dim}${a.swFail} gagal${C.reset}`);
+      lines.push(`${C.dim}└${C.reset} Status: ${sc}${a.status}${C.reset}`);
     }
 
     // activity feed
     lines.push("");
-    lines.push(`${C.dim}── ACTIVITY ──────────────────────────────${C.reset}`);
+    lines.push(`${C.dim}─────────────────── AKTIVITAS ───────────────────${C.reset}`);
     for (const l of this.log) {
       lines.push(
-        `${C.gray}${l.t}${C.reset} ${C.bold}${l.label.padEnd(3)}${C.reset} ${KIND_COLOR[l.kind]}${l.msg}${C.reset}`,
+        `${C.gray}${l.t}${C.reset}  ${C.bold}[${l.label}]${C.reset} ${KIND_COLOR[l.kind]}${l.msg}${C.reset}`,
       );
     }
 

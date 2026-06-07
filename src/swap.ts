@@ -42,13 +42,21 @@ export async function executeSwap(
   }
 }
 
-export async function retry<T extends { ok: boolean }>(
+// Errors that won't fix on retry — retrying only locks more funds in escrows.
+// e.g. liquidity shortage on the DEX side ("Insufficient holdings ...").
+export function isNonRetryable(error?: string): boolean {
+  if (!error) return false;
+  return /insufficient holdings|insufficient_swap_holdings|liquidity/i.test(error);
+}
+
+export async function retry<T extends { ok: boolean; error?: string }>(
   fn: () => Promise<T>,
   retries = 2,
   backoffMs = 3000,
 ): Promise<T> {
   let last = await fn();
   for (let i = 0; i < retries && !last.ok; i++) {
+    if (isNonRetryable(last.error)) break; // don't burn another escrow lock
     await new Promise((r) => setTimeout(r, backoffMs * (i + 1)));
     last = await fn();
   }
