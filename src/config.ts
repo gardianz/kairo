@@ -48,6 +48,8 @@ const configSchema = z.object({
   jitterMinutes: z.number().int().min(0).default(15),
   accountDelayMs: z.number().int().min(0).default(8000),
   maxConcurrent: z.number().int().min(1).default(5), // accounts processed in parallel
+  autoRecheckMinutes: z.number().int().min(0).default(0), // re-attempt liquidity-skipped quests every N min (0=off; each retry may lock CC)
+  autoRecheckMax: z.number().int().min(0).default(6), // max recheck rounds
   quests: z.array(questSchema).min(1),
   accountsFile: z.string().optional(), // inline accounts.json (best for VPS)
   accounts: z.array(accountSchema).default([]), // file-based accounts (optional)

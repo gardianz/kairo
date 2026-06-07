@@ -49,6 +49,13 @@ export function isNonRetryable(error?: string): boolean {
   return /insufficient holdings|insufficient_swap_holdings|liquidity/i.test(error);
 }
 
+// Pull pool numbers from a liquidity error: "Required: 1.815, available: 0.037".
+export function parseLiquidity(error?: string): { required: number; available: number } | null {
+  if (!error) return null;
+  const m = error.match(/required:\s*([\d.]+).*?available:\s*([\d.]+)/i);
+  return m ? { required: Number(m[1]), available: Number(m[2]) } : null;
+}
+
 export async function retry<T extends { ok: boolean; error?: string }>(
   fn: () => Promise<T>,
   retries = 2,

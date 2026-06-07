@@ -23,7 +23,8 @@ export async function completeAllQuests(
         });
   dash?.start();
 
-  const summaries = await runPool(accounts, cfg.maxConcurrent, (acc) =>
+  const byName = new Map(accounts.map((a) => [a.name, a]));
+  const run1 = (acc: ResolvedAccount) =>
     runAccount(
       cfg,
       acc,
@@ -32,8 +33,32 @@ export async function completeAllQuests(
         log: (msg, kind) => dash?.addLog(acc.name, msg, kind),
       },
       opts.signal,
-    ),
-  );
+    );
+
+  const summaries = await runPool(accounts, cfg.maxConcurrent, run1);
+
+  // Optional: re-attempt accounts whose only remaining quests were skipped for
+  // DEX liquidity, in case the pool refilled. Each retry may lock CC.
+  if (cfg.autoRecheckMinutes > 0) {
+    for (let round = 0; round < cfg.autoRecheckMax && !opts.signal?.cancelled; round++) {
+      const retryNames = summaries
+        .filter((s) => s.liquiditySkipped.length > 0 && s.questsRemaining.length > 0)
+        .map((s) => s.account);
+      if (retryNames.length === 0) break;
+      for (const name of retryNames) dash?.addLog(name, `recheck dalam ${cfg.autoRecheckMinutes} menit`, "info");
+      await new Promise((r) => setTimeout(r, cfg.autoRecheckMinutes * 60_000));
+      if (opts.signal?.cancelled) break;
+      const retried = await runPool(
+        retryNames.map((n) => byName.get(n)!),
+        cfg.maxConcurrent,
+        run1,
+      );
+      for (const s of retried) {
+        const i = summaries.findIndex((x) => x.account === s.account);
+        if (i >= 0) summaries[i] = s;
+      }
+    }
+  }
 
   dash?.stop();
   for (const s of summaries) await report(cfg, s); // file log + telegram

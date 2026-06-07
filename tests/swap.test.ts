@@ -1,5 +1,16 @@
 import { describe, it, expect } from "vitest";
-import { isNonRetryable, retry } from "../src/swap.ts";
+import { isNonRetryable, parseLiquidity, retry } from "../src/swap.ts";
+
+describe("parseLiquidity", () => {
+  it("extracts required + available from the error", () => {
+    const e = '400 /swap/simple-escrow/submit: "Insufficient holdings. Required: 1.8151329973, available: 0.0369996495"';
+    expect(parseLiquidity(e)).toEqual({ required: 1.8151329973, available: 0.0369996495 });
+  });
+  it("returns null when no numbers", () => {
+    expect(parseLiquidity("network timeout")).toBeNull();
+    expect(parseLiquidity(undefined)).toBeNull();
+  });
+});
 
 describe("isNonRetryable", () => {
   it("flags liquidity / holdings errors", () => {

@@ -14,6 +14,11 @@ maxSwapsPerRun: 20        # hard cap on swaps per run
 swapDelayMs: 4000         # delay between swaps (settlement + rate limit)
 accountDelayMs: 8000      # (unused in concurrent mode; kept for reference)
 maxConcurrent: 5          # how many accounts to process in parallel
+# Re-attempt quests skipped due to DEX liquidity (e.g. USDCx pool empty) every
+# N minutes, in case the pool refilled. 0 = off. WARNING: each retry attempt
+# may lock ~swapAmount CC in an escrow for ~13 min if the pool is still dry.
+autoRecheckMinutes: 0
+autoRecheckMax: 6         # max recheck rounds
 
 swapReserveCC: 1          # keep this much unlocked CC above swap amount (fee buffer)
 consolidateToCC: true     # at end of run, swap leftover non-CC tokens back to CC

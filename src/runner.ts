@@ -8,7 +8,7 @@ import type { AcctView, Kind } from "./dashboard.ts";
 import { Session } from "./session.ts";
 import { plan } from "./quest-engine.ts";
 import { checkAction, type RunCounters } from "./safety.ts";
-import { executeSwap, retry, isNonRetryable } from "./swap.ts";
+import { executeSwap, retry, isNonRetryable, parseLiquidity } from "./swap.ts";
 import { logger } from "./reporter.ts";
 
 export interface AccountHooks {
@@ -77,6 +77,7 @@ export async function runAccount(
     questsRemaining: [],
     spentCC: 0,
     errors: [],
+    liquiditySkipped: [],
   };
 
   up({ state: "busy", status: "memuat sesi", party: acc.bundle.partyId?.slice(-6) ?? "" });
@@ -205,10 +206,11 @@ export async function runAccount(
           // e.g. DEX out of USDCx liquidity — skip this quest so we stop locking CC.
           skipQuests.add(action.questId);
           consecutiveFails = 0;
-          log(
-            `swap ${lbl(action.from)} → ${lbl(action.to)} dilewati: liquiditas ${lbl(action.to)} kurang di Kairo`,
-            "error",
-          );
+          const liq = parseLiquidity(res.error);
+          const detail = liq
+            ? `pool ${lbl(action.to)} ${liq.available} < butuh ${liq.required}`
+            : `liquiditas ${lbl(action.to)} kurang`;
+          log(`swap ${lbl(action.from)} → ${lbl(action.to)} dilewati: ${detail} (coba lagi run berikutnya)`, "error");
         } else {
           consecutiveFails += 1;
           log(`swap ${lbl(action.from)} → ${lbl(action.to)} gagal: ${String(res.error).slice(0, 30)}`, "error");
@@ -224,6 +226,7 @@ export async function runAccount(
     quests = await session.api.getQuests();
     summary.questsCompleted = quests.filter((q) => q.status === "completed").map((q) => q.id);
     summary.questsRemaining = quests.filter((q) => q.status !== "completed").map((q) => q.id);
+    summary.liquiditySkipped = [...skipQuests];
     if (summary.questsRemaining.length > 0) up({ status: "menukar sisa token ke CC" });
 
     // Consolidate: swap any leftover non-CC tokens back to CC (Amulet).

@@ -122,4 +122,5 @@ export interface RunSummary {
   spentCC: number;
   aborted?: string;
   errors: string[];
+  liquiditySkipped: string[]; // quest ids skipped this run due to DEX liquidity
 }
