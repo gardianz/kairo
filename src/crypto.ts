@@ -26,6 +26,11 @@ export function signHash(hashB64: string, secretB64: string): string {
 }
 
 // Verify a decrypted secret matches the wallet's stored public key.
+// Returns false (never throws) for malformed/garbage secrets.
 export function verifySecret(secretB64: string, storedPublicKey: string): boolean {
-  return pubFromSecret(secretB64) === storedPublicKey;
+  try {
+    return pubFromSecret(secretB64) === storedPublicKey;
+  } catch {
+    return false;
+  }
 }

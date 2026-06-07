@@ -33,6 +33,34 @@ export function formatBalances(balances: Balance[], label: (t: Token) => string)
   return parts.join("  ") || "empty";
 }
 
+// Card-style amount: big -> trimmed decimal, tiny -> scientific (7.25e-6).
+export function fmtCardAmt(n: number): string {
+  if (n === 0) return "0";
+  if (n >= 0.001) return n.toFixed(4).replace(/\.?0+$/, "");
+  return n.toExponential(2);
+}
+
+// One token's balance for a card: "12.71(+2L)" / "7.25e-6".
+export function cardBal(balances: Balance[], token: Token): string {
+  const b = balances.find((x) => x.token === token);
+  if (!b) return "0";
+  let s = fmtCardAmt(b.unlocked);
+  if (b.locked > 0) s += `(+${fmtCardAmt(b.locked)}L)`;
+  return s;
+}
+
+// Map live quests to the card's CNT / CB / UX view.
+export function questView(quests: QuestActivity[]): { cnt: string; cb: "Y" | "N"; ux: "Y" | "N" } {
+  const count = quests.find((q) => /count|min_swap/i.test(q.id));
+  const cbtc = quests.find((q) => /cbtc/i.test(q.id));
+  const usdcx = quests.find((q) => /usdcx/i.test(q.id));
+  return {
+    cnt: count ? `${count.current}/${count.target}` : "-",
+    cb: cbtc?.status === "completed" ? "Y" : "N",
+    ux: usdcx?.status === "completed" ? "Y" : "N",
+  };
+}
+
 // One daily quest activity as returned by the API.
 export interface QuestActivity {
   id: string;

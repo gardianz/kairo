@@ -5,7 +5,7 @@ import type { ResolvedAccount } from "./accounts.ts";
 import { Session } from "./session.ts";
 import { Dashboard } from "./dashboard.ts";
 import { runPool } from "./pool.ts";
-import { formatBalances, TOKEN_LABEL } from "./types.ts";
+import { cardBal, formatBalances, questView, TOKEN_LABEL } from "./types.ts";
 
 export interface CheckResult {
   name: string;
@@ -13,6 +13,7 @@ export interface CheckResult {
   partyTail: string;
   bal: string;
   quests: string;
+  swaps: number;
   error?: string;
 }
 
@@ -21,12 +22,20 @@ export async function checkAccounts(
   accounts: ResolvedAccount[],
   opts: { showDashboard?: boolean } = {},
 ): Promise<CheckResult[]> {
-  const dash = opts.showDashboard === false ? null : new Dashboard("Account check", accounts.map((a) => a.name));
+  const proxied = accounts.filter((a) => a.proxy).length;
+  const dash =
+    opts.showDashboard === false
+      ? null
+      : new Dashboard("Account Check", accounts.map((a) => a.name), { swapAmt: cfg.swapAmountCC, proxied });
   dash?.start();
 
   const results = await runPool(accounts, cfg.maxConcurrent, async (acc) => {
-    const r: CheckResult = { name: acc.name, ok: false, partyTail: "", bal: "-", quests: "-" };
-    dash?.set(acc.name, { state: "busy", phase: "logging in", party: acc.bundle.partyId?.slice(-6) ?? "" });
+    const r: CheckResult = { name: acc.name, ok: false, partyTail: "", bal: "-", quests: "-", swaps: 0 };
+    if (acc.proxy) {
+      const host = acc.proxy.replace(/^https?:\/\/([^@]*@)?/i, "").split("/")[0];
+      dash?.addLog(acc.name, `proxy ${host}`, "proxy");
+    }
+    dash?.setAcct(acc.name, { state: "busy", status: "logging in", party: acc.bundle.partyId?.slice(-6) ?? "" });
     try {
       const session = Session.create(cfg.apiBase, acc.bundle, acc.password, acc.persist, acc.proxy);
       r.partyTail = session.partyId.slice(-6);
@@ -39,18 +48,24 @@ export async function checkAccounts(
       r.bal = formatBalances(balances, (t) => TOKEN_LABEL[t]);
       const done = quests.filter((q) => q.status === "completed").length;
       r.quests = `${done}/${quests.length}`;
+      r.swaps = swaps.totalSwaps;
       r.ok = true;
-      dash?.set(acc.name, {
+      const qv = questView(quests);
+      dash?.setAcct(acc.name, {
         state: "done",
         party: r.partyTail,
-        phase: `online ✓  ($${swaps.volumeUsd.toFixed(2)} vol 24h)`,
-        bal: r.bal,
-        quests: r.quests,
-        swaps: swaps.totalSwaps,
+        ...qv,
+        cc: cardBal(balances, "Amulet"),
+        uxBal: cardBal(balances, "USDCx"),
+        cbBal: cardBal(balances, "CBTC"),
+        swOk: swaps.totalSwaps,
+        status: `online ✓ · ${done}/${quests.length} quests · $${swaps.volumeUsd.toFixed(2)} 24h`,
       });
+      dash?.addLog(acc.name, `balance CC ${cardBal(balances, "Amulet")} · quest ${r.quests}`, "balance");
     } catch (err) {
       r.error = err instanceof Error ? err.message : String(err);
-      dash?.set(acc.name, { state: "error", phase: "login failed", note: r.error.slice(0, 28) });
+      dash?.setAcct(acc.name, { state: "error", status: `login failed: ${r.error.slice(0, 30)}` });
+      dash?.addLog(acc.name, `error ${r.error.slice(0, 36)}`, "error");
     }
     return r;
   });

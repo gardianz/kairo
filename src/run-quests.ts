@@ -12,11 +12,27 @@ export async function completeAllQuests(
   accounts: ResolvedAccount[],
   opts: { signal?: CancelToken; showDashboard?: boolean } = {},
 ): Promise<RunSummary[]> {
-  const dash = opts.showDashboard === false ? null : new Dashboard("Complete daily quests", accounts.map((a) => a.name));
+  const proxied = accounts.filter((a) => a.proxy).length;
+  const dash =
+    opts.showDashboard === false
+      ? null
+      : new Dashboard("Auto Task", accounts.map((a) => a.name), {
+          swapAmt: cfg.swapAmountCC,
+          proxied,
+          nextRunCron: cfg.scheduleCron,
+        });
   dash?.start();
 
   const summaries = await runPool(accounts, cfg.maxConcurrent, (acc) =>
-    runAccount(cfg, acc, { update: (u) => dash?.set(acc.name, u) }, opts.signal),
+    runAccount(
+      cfg,
+      acc,
+      {
+        acct: (u) => dash?.setAcct(acc.name, u),
+        log: (msg, kind) => dash?.addLog(acc.name, msg, kind),
+      },
+      opts.signal,
+    ),
   );
 
   dash?.stop();

@@ -104,10 +104,11 @@ export class TelegramControl {
     const res = await checkAccounts(this.cfg, accounts, { showDashboard: false });
     const lines = res.map((r) =>
       r.ok
-        ? `✅ *${r.name}* — quest ${r.quests}\n   ${r.bal}`
+        ? `✅ *${r.name}*  quest ${r.quests} · ${r.swaps} sw 24h\n   \`${r.bal}\``
         : `❌ *${r.name}* — ${r.error}`,
     );
-    await this.send(lines.join("\n"));
+    const ok = res.filter((r) => r.ok).length;
+    await this.send(`📊 *Accounts ${ok}/${res.length} online*\n\n` + lines.join("\n"));
   }
 
   private async doRun(): Promise<void> {

@@ -1,10 +1,10 @@
 // Run one account: read live quests + balance, plan remaining actions, execute
 // swaps under safety guards, then report.
 import type { Config } from "./config.ts";
-import type { Balance, RunSummary, Token } from "./types.ts";
-import { formatBalances, TOKEN_LABEL } from "./types.ts";
+import type { Balance, QuestActivity, RunSummary, Token } from "./types.ts";
+import { cardBal, questView } from "./types.ts";
 import type { ResolvedAccount } from "./accounts.ts";
-import type { Row } from "./dashboard.ts";
+import type { AcctView, Kind } from "./dashboard.ts";
 import { Session } from "./session.ts";
 import { plan } from "./quest-engine.ts";
 import { checkAction, type RunCounters } from "./safety.ts";
@@ -12,7 +12,8 @@ import { executeSwap, retry } from "./swap.ts";
 import { logger } from "./reporter.ts";
 
 export interface AccountHooks {
-  update?: (u: Partial<Row>) => void;
+  acct?: (u: Partial<AcctView>) => void;
+  log?: (msg: string, kind: Kind) => void;
 }
 
 // Cooperative cancellation token (set cancelled=true to stop a running job).
@@ -54,9 +55,15 @@ export async function runAccount(
   hooks: AccountHooks = {},
   signal?: CancelToken,
 ): Promise<RunSummary> {
-  const up = (u: Partial<Row>) => hooks.update?.(u);
-  const questStr = (qs: { status: string }[]) =>
-    `${qs.filter((q) => q.status === "completed").length}/${qs.length}`;
+  const up = (u: Partial<AcctView>) => hooks.acct?.(u);
+  const log = (msg: string, kind: Kind = "info") => hooks.log?.(msg, kind);
+  const balView = (b: Balance[]) => ({
+    cc: cardBal(b, "Amulet"),
+    uxBal: cardBal(b, "USDCx"),
+    cbBal: cardBal(b, "CBTC"),
+  });
+  let swOk = 0,
+    swFail = 0;
   const startedAt = new Date().toISOString();
   const summary: RunSummary = {
     account: acc.name,
@@ -71,21 +78,27 @@ export async function runAccount(
     errors: [],
   };
 
-  up({ state: "busy", phase: "loading session", party: acc.bundle.partyId?.slice(-6) ?? "" });
+  up({ state: "busy", status: "loading session", party: acc.bundle.partyId?.slice(-6) ?? "" });
+  if (acc.proxy) {
+    const host = acc.proxy.replace(/^https?:\/\/([^@]*@)?/i, "").split("/")[0];
+    log(`proxy ${host}`, "proxy");
+  }
   let session: Session;
   try {
     session = Session.create(cfg.apiBase, acc.bundle, acc.password, acc.persist, acc.proxy);
     summary.partyId = session.partyId;
-    up({ party: session.partyId.slice(-6), phase: "refreshing token" });
+    up({ party: session.partyId.slice(-6), status: "refreshing token" });
     await session.ensureFresh();
   } catch (err) {
     summary.aborted = err instanceof Error ? err.message : String(err);
     summary.finishedAt = new Date().toISOString();
-    up({ state: "error", phase: "auth failed", note: summary.aborted });
+    up({ state: "error", status: summary.aborted });
+    log(`auth failed: ${summary.aborted}`, "error");
     return summary;
   }
 
   const counters: RunCounters = { spentCC: 0, swapCount: 0 };
+  let quests: QuestActivity[] = [];
   try {
     // Onboarding follow quests: just PATCH follows=true (no real follow needed).
     for (const platform of ["x", "telegram"] as const) {
@@ -98,11 +111,16 @@ export async function runAccount(
       }
     }
 
-    up({ phase: "follow quests" });
-    let quests = await session.api.getQuests();
+    up({ status: "follow quests" });
+    quests = await session.api.getQuests();
     let balances = await session.api.getBalances(session.partyId);
     let consecutiveFails = 0;
-    up({ quests: questStr(quests), bal: formatBalances(balances, (t) => TOKEN_LABEL[t]), phase: "working" });
+    const qv = questView(quests);
+    up({ ...qv, ...balView(balances), status: "working" });
+    log(
+      `balance CC ${cardBal(balances, "Amulet")}  UX ${cardBal(balances, "USDCx")}  CB ${cardBal(balances, "CBTC")} · quest ${quests.filter((q) => q.status === "completed").length}/${quests.length}`,
+      "balance",
+    );
 
     // Quest-driven loop: re-read progress each iteration, do ONE swap toward the
     // next remaining quest, repeat until all quests done (plan() returns []), a
@@ -128,9 +146,10 @@ export async function runAccount(
       const need = action.from === "Amulet" ? action.amountCC + cfg.swapReserveCC : action.amountCC;
       if (unlockedOf(balances, action.from) < need) {
         if (cfg.waitForUnlock) {
-          up({ state: "wait", phase: "wait escrow unlock", note: `need ${need} ${action.from}` });
+          up({ state: "wait", status: `wait unlock (need ${need} ${action.from})` });
+          log(`waiting escrow unlock — need ${need} ${action.from}`, "info");
           balances = await waitForUnlock(session, action.from, need, cfg, (u) =>
-            up({ note: `unlocked ${u.toFixed(2)}/${need}` }),
+            up({ status: `unlock ${u.toFixed(2)}/${need} ${action.from}` }),
           );
         }
         if (unlockedOf(balances, action.from) < need) {
@@ -149,12 +168,7 @@ export async function runAccount(
         break;
       }
 
-      up({
-        state: "busy",
-        phase: `swap ${action.from}→${action.to}`,
-        note: `${action.amountCC} CC`,
-        swaps: counters.swapCount,
-      });
+      up({ state: "busy", status: `swap ${action.from}→${action.to} ${action.amountCC}CC` });
       summary.swapsAttempted += 1;
       const res = await retry(() => executeSwap(session, action.from, action.to, action.amountCC));
       counters.swapCount += 1;
@@ -162,43 +176,58 @@ export async function runAccount(
       summary.spentCC = counters.spentCC;
       if (res.ok) {
         summary.swapsSucceeded += 1;
+        swOk += 1;
         consecutiveFails = 0;
+        log(`${action.from}→${action.to} ${action.amountCC}CC ✓`, "swap");
         if (action.roundTripBack && res.outputAmount) {
           await new Promise((r) => setTimeout(r, cfg.swapDelayMs));
           const back = await retry(() =>
             executeSwap(session, action.to, action.from, Number(res.outputAmount)),
           );
           counters.swapCount += 1;
-          if (!back.ok) summary.errors.push(`back ${action.to}->${action.from}: ${back.error}`);
+          if (back.ok) {
+            swOk += 1;
+            log(`${action.to}→${action.from} (back) ✓`, "swap");
+          } else {
+            swFail += 1;
+            summary.errors.push(`back ${action.to}->${action.from}: ${back.error}`);
+            log(`${action.to}→${action.from} back ✗`, "error");
+          }
         }
       } else {
+        swFail += 1;
         consecutiveFails += 1;
         summary.errors.push(`${action.from}->${action.to}: ${res.error}`);
+        log(`${action.from}→${action.to} ✗ ${String(res.error).slice(0, 30)}`, "error");
       }
 
       await new Promise((r) => setTimeout(r, cfg.swapDelayMs));
       balances = await session.api.getBalances(session.partyId);
       quests = await session.api.getQuests(); // re-read progress for next iteration
-      up({ quests: questStr(quests), bal: formatBalances(balances, (t) => TOKEN_LABEL[t]), swaps: counters.swapCount });
+      up({ ...questView(quests), ...balView(balances), swOk, swFail });
     }
 
     quests = await session.api.getQuests();
     summary.questsCompleted = quests.filter((q) => q.status === "completed").map((q) => q.id);
     summary.questsRemaining = quests.filter((q) => q.status !== "completed").map((q) => q.id);
-    if (summary.questsRemaining.length > 0) up({ phase: "consolidating" });
+    if (summary.questsRemaining.length > 0) up({ status: "consolidating" });
 
     // Consolidate: swap any leftover non-CC tokens back to CC (Amulet).
     if (cfg.consolidateToCC && (!cfg.consolidateOnlyWhenQuestsDone || summary.questsRemaining.length === 0)) {
       balances = await session.api.getBalances(session.partyId);
       for (const b of balances) {
         if (b.token === "Amulet" || b.unlocked <= cfg.dustMinUnlocked) continue;
-        logger.info({ account: acc.name, token: b.token, amount: b.unlocked }, "consolidating to CC");
         const res = await retry(() => executeSwap(session, b.token, "Amulet", b.unlocked));
-        if (res.ok) summary.swapsSucceeded += 1;
-        else summary.errors.push(`consolidate ${b.token}->Amulet: ${res.error}`);
+        if (res.ok) {
+          summary.swapsSucceeded += 1;
+          swOk += 1;
+        } else summary.errors.push(`consolidate ${b.token}->Amulet: ${res.error}`);
         summary.swapsAttempted += 1;
         await new Promise((r) => setTimeout(r, cfg.swapDelayMs));
       }
+      balances = await session.api.getBalances(session.partyId);
+      up({ ...balView(balances), swOk, swFail });
+      log(`swept leftovers to Amulet (CC ${cardBal(balances, "Amulet")})`, "done");
     }
   } catch (err) {
     summary.errors.push(err instanceof Error ? err.message : String(err));
@@ -206,12 +235,13 @@ export async function runAccount(
 
   summary.finishedAt = new Date().toISOString();
   const allDone = summary.questsRemaining.length === 0 && !summary.aborted;
+  log(allDone ? "all quests done" : summary.aborted ?? "finished with issues", allDone ? "done" : "error");
   up({
     state: allDone ? "done" : "error",
-    quests: `${summary.questsCompleted.length}/${summary.questsCompleted.length + summary.questsRemaining.length}`,
-    swaps: counters.swapCount,
-    phase: summary.aborted ?? (allDone ? "all quests done" : "finished with issues"),
-    note: summary.errors.length ? summary.errors[summary.errors.length - 1].slice(0, 24) : "",
+    ...questView(quests),
+    swOk,
+    swFail,
+    status: allDone ? "all quests done — pending" : summary.aborted ?? "finished with issues",
   });
   return summary;
 }

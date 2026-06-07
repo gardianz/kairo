@@ -20,9 +20,17 @@ describe("crypto", () => {
     expect(decryptSecret(w.cantonKey, "hunter2")).toBe(w.secretB64);
   });
 
-  it("throws on wrong password", () => {
+  it("never yields a valid key with the wrong password", () => {
     const w = makeWallet("hunter2");
-    expect(() => decryptSecret(w.cantonKey, "wrong")).toThrow();
+    // CryptoJS may throw OR return garbage on a bad password; the real guarantee
+    // (what the bot relies on) is that the wrong password never reconstructs the key.
+    let secret: string | null = null;
+    try {
+      secret = decryptSecret(w.cantonKey, "wrong");
+    } catch {
+      secret = null;
+    }
+    expect(secret === null || !verifySecret(secret, w.publicKey)).toBe(true);
   });
 
   it("derives the stored public key from the secret", () => {

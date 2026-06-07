@@ -1,61 +1,126 @@
-// Live terminal dashboard: one row per account, redrawn in place. Detailed
-// logs still go to logs/bot.log; this is for at-a-glance monitoring.
+// Rich live dashboard: per-account cards + scrolling activity feed.
+// Detailed logs still go to logs/bot.log; this is the at-a-glance monitor.
 
-export interface Row {
+export type Kind = "proxy" | "balance" | "swap" | "done" | "error" | "info";
+
+export interface AcctView {
   name: string;
   party: string;
-  phase: string;
-  quests: string; // "2/3"
-  swaps: number;
-  bal: string; // all token balances (unlocked + locked)
-  note: string;
+  cnt: string; // count quest "5/5" or "-"
+  cb: "Y" | "N" | "-"; // CC<->CBTC quest
+  ux: "Y" | "N" | "-"; // CC<->USDCx quest
+  swOk: number;
+  swFail: number;
+  cc: string; // formatted CC balance (with +NL if locked)
+  uxBal: string;
+  cbBal: string;
+  status: string;
   state: "idle" | "busy" | "wait" | "done" | "error";
 }
 
-const COLOR: Record<Row["state"], string> = {
-  idle: "\x1b[90m",
-  busy: "\x1b[36m",
-  wait: "\x1b[33m",
-  done: "\x1b[32m",
-  error: "\x1b[31m",
+const C = {
+  reset: "\x1b[0m",
+  bold: "\x1b[1m",
+  dim: "\x1b[2m",
+  red: "\x1b[31m",
+  green: "\x1b[32m",
+  yellow: "\x1b[33m",
+  blue: "\x1b[34m",
+  magenta: "\x1b[35m",
+  cyan: "\x1b[36m",
+  gray: "\x1b[90m",
 };
-const RESET = "\x1b[0m";
-const DIM = "\x1b[2m";
 
-const pad = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + "…" : s.padEnd(n));
+const KIND_COLOR: Record<Kind, string> = {
+  proxy: C.magenta,
+  balance: C.cyan,
+  swap: C.yellow,
+  done: C.green,
+  error: C.red,
+  info: C.gray,
+};
+
+const STATE_COLOR: Record<AcctView["state"], string> = {
+  idle: C.gray,
+  busy: C.cyan,
+  wait: C.yellow,
+  done: C.green,
+  error: C.red,
+};
+
+interface LogLine {
+  t: string;
+  label: string;
+  msg: string;
+  kind: Kind;
+}
+
+export interface DashOpts {
+  swapAmt: number;
+  proxied: number;
+  nextRunCron?: string; // "m h * * *" for countdown
+  maxLog?: number;
+}
+
+function nextRun(cron?: string): { at: Date; label: string } | null {
+  if (!cron) return null;
+  const m = cron.match(/^(\d+)\s+(\d+)\s/);
+  if (!m) return null;
+  const min = +m[1],
+    hr = +m[2];
+  const now = new Date();
+  const at = new Date(now);
+  at.setHours(hr, min, 0, 0);
+  if (at <= now) at.setDate(at.getDate() + 1);
+  return { at, label: `${String(hr).padStart(2, "0")}:${String(min).padStart(2, "0")}` };
+}
 
 export class Dashboard {
-  private rows = new Map<string, Row>();
+  private accts = new Map<string, AcctView>();
+  private log: LogLine[] = [];
   private timer?: NodeJS.Timeout;
-  private lastLines = 0;
-  private title: string;
-  private startedAt = Date.now();
+  private started = false;
 
-  constructor(title: string, names: string[]) {
-    this.title = title;
+  constructor(
+    private title: string,
+    names: string[],
+    private opts: DashOpts,
+  ) {
     for (const name of names) {
-      this.rows.set(name, {
+      this.accts.set(name, {
         name,
         party: "",
-        phase: "queued",
-        quests: "-",
-        swaps: 0,
-        bal: "-",
-        note: "",
+        cnt: "-",
+        cb: "-",
+        ux: "-",
+        swOk: 0,
+        swFail: 0,
+        cc: "-",
+        uxBal: "-",
+        cbBal: "-",
+        status: "queued",
         state: "idle",
       });
     }
   }
 
-  set(name: string, partial: Partial<Row>): void {
-    const row = this.rows.get(name);
-    if (row) Object.assign(row, partial);
+  setAcct(name: string, u: Partial<AcctView>): void {
+    const a = this.accts.get(name);
+    if (a) Object.assign(a, u);
+  }
+
+  addLog(label: string, msg: string, kind: Kind): void {
+    const t = new Date().toTimeString().slice(0, 8);
+    this.log.push({ t, label, msg, kind });
+    const max = this.opts.maxLog ?? 14;
+    if (this.log.length > max) this.log.shift();
   }
 
   start(): void {
-    process.stdout.write("\x1b[?25l"); // hide cursor
+    this.started = true;
+    process.stdout.write("\x1b[2J\x1b[?25l"); // clear + hide cursor
     this.render();
-    this.timer = setInterval(() => this.render(), 700);
+    this.timer = setInterval(() => this.render(), 1000);
   }
 
   stop(): void {
@@ -65,26 +130,47 @@ export class Dashboard {
   }
 
   private render(): void {
-    const elapsed = Math.floor((Date.now() - this.startedAt) / 1000);
-    const W = { name: 10, party: 8, state: 7, quests: 7, swaps: 6, phase: 34 };
-    const header =
-      `${DIM}${pad("ACCOUNT", W.name)} ${pad("PARTY", W.party)} ${pad("STATE", W.state)} ` +
-      `${pad("QUESTS", W.quests)} ${pad("SWAPS", W.swaps)} ${pad("PHASE", W.phase)}${RESET}`;
-
-    const lines = [`\x1b[1m🛰  ${this.title}${RESET}  ${DIM}(${elapsed}s)${RESET}`, header];
-    for (const r of this.rows.values()) {
-      const c = COLOR[r.state];
-      lines.push(
-        `${pad(r.name, W.name)} ${DIM}${pad(r.party, W.party)}${RESET} ${c}${pad(r.state.toUpperCase(), W.state)}${RESET} ` +
-          `${pad(r.quests, W.quests)} ${pad(String(r.swaps), W.swaps)} ${c}${pad(r.phase + (r.note ? " — " + r.note : ""), W.phase)}${RESET}`,
-      );
-      // second line: full balances (all tokens, unlocked + locked), not truncated
-      lines.push(`${DIM}   └ bal: ${r.bal}${RESET}`);
+    if (!this.started) return;
+    const lines: string[] = [];
+    const clock = new Date().toTimeString().slice(0, 8);
+    const nr = nextRun(this.opts.nextRunCron);
+    let countdown = "";
+    if (nr) {
+      const diff = Math.max(0, nr.at.getTime() - Date.now());
+      const h = Math.floor(diff / 3600000);
+      const mm = Math.floor((diff % 3600000) / 60000);
+      countdown = ` • next ${nr.label} in ${h}h${mm}m`;
     }
 
-    // redraw in place
-    if (this.lastLines > 0) process.stdout.write(`\x1b[${this.lastLines}A`);
-    process.stdout.write(lines.map((l) => "\x1b[2K" + l).join("\n") + "\n");
-    this.lastLines = lines.length;
+    // header
+    lines.push(`${C.bold}${C.magenta}        KAIRO BOT V1 • ${this.title.toUpperCase()}${C.reset}`);
+    lines.push(
+      `${C.dim}   ${this.accts.size} acct • ${C.green}LIVE${C.reset}${C.dim} • ${this.opts.proxied} proxied • ${clock}${countdown}${C.reset}`,
+    );
+    lines.push("");
+
+    // cards
+    for (const a of this.accts.values()) {
+      const sc = STATE_COLOR[a.state];
+      const head = `─ ${C.bold}${a.name}${C.reset} ${C.dim}@${this.opts.swapAmt}${a.party ? "  " + a.party : ""}${C.reset} `;
+      lines.push(head + C.dim + "─".repeat(Math.max(0, 46 - a.name.length - String(this.opts.swapAmt).length)) + C.reset);
+      const yn = (v: "Y" | "N" | "-") => (v === "Y" ? `${C.green}Y${C.reset}` : v === "N" ? `${C.red}N${C.reset}` : `${C.gray}-${C.reset}`);
+      lines.push(
+        `  CNT ${a.cnt}   CB ${yn(a.cb)}  UX ${yn(a.ux)}    ${C.dim}sw${C.reset} ${a.swOk}/${a.swFail}`,
+      );
+      lines.push(`  ${C.cyan}CC${C.reset} ${a.cc}   ${C.cyan}UX${C.reset} ${a.uxBal}   ${C.cyan}CB${C.reset} ${a.cbBal}`);
+      lines.push(`  ${sc}> ${a.status}${C.reset}`);
+    }
+
+    // activity feed
+    lines.push("");
+    lines.push(`${C.dim}── ACTIVITY ──────────────────────────────${C.reset}`);
+    for (const l of this.log) {
+      lines.push(
+        `${C.gray}${l.t}${C.reset} ${C.bold}${l.label.padEnd(3)}${C.reset} ${KIND_COLOR[l.kind]}${l.msg}${C.reset}`,
+      );
+    }
+
+    process.stdout.write("\x1b[H\x1b[2J" + lines.join("\n") + "\n");
   }
 }
