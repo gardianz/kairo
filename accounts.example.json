@@ -2,8 +2,9 @@
   {
     "name": "main",
     "password": "WALLET_PASSWORD_HERE",
+    "proxy": "http://user:pass@1.2.3.4:8080",
     "bundle": {
-      "_comment": "Paste the bundle object copied by the extension's 'Copy account JSON' button. That button gives you this whole {name,password,bundle} entry ready to paste into the array."
+      "_comment": "Paste the bundle object from the extension's 'Copy account JSON' button (which gives you this whole {name,password,bundle} entry). 'proxy' is optional per account; omit to use the global proxy in config.yaml."
     }
   }
 ]

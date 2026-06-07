@@ -1,4 +1,5 @@
 // Thin client for the Kairo backend API (api.kairo.ag). Auth = Bearer authToken.
+import { fetch, type Dispatcher, type RequestInit } from "undici";
 import type { Balance, QuestActivity, Token } from "./types.ts";
 
 export interface PreparedSwap {
@@ -12,11 +13,13 @@ export class KairoApi {
   constructor(
     private base: string,
     private getToken: () => string,
+    private dispatcher?: Dispatcher,
   ) {}
 
   private async req(path: string, init?: RequestInit): Promise<any> {
     const res = await fetch(this.base + path, {
       ...init,
+      dispatcher: this.dispatcher,
       headers: {
         Authorization: `Bearer ${this.getToken()}`,
         "Content-Type": "application/json",
@@ -125,11 +128,12 @@ export class KairoApi {
   async refresh(refreshToken: string): Promise<{ token: string; refreshToken: string }> {
     const res = await fetch(this.base + "/auth/refresh-token", {
       method: "POST",
+      dispatcher: this.dispatcher,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refresh: refreshToken }),
     });
     if (!res.ok) throw new Error(`refresh-token failed: ${res.status}`);
-    const body = await res.json();
+    const body = (await res.json()) as any;
     const d = body?.data?.data ?? body?.data;
     return { token: d.token, refreshToken: d.refreshToken };
   }

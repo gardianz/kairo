@@ -84,6 +84,18 @@ telegram:
   chatId: "123456789"
 ```
 
+## Proxy (for blocked regions)
+
+Kairo blocks some jurisdictions (e.g. a Singapore VPS gets `403 unsupported
+jurisdiction`). Route requests through a proxy in a supported country:
+
+- Global: set `proxy: "http://user:pass@host:port"` in `config.yaml`.
+- Per account: add `"proxy": "http://..."` to that account's entry in
+  `accounts.json` (overrides global — use a different IP per account).
+
+HTTP/HTTPS proxies supported. All Kairo API calls (balances, quotes, swaps,
+token refresh) route through the proxy; Telegram does not.
+
 ## Safety
 
 - `secret/`, `sessions/`, `config.yaml`, `user-data/` are gitignored. A session

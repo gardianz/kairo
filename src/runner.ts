@@ -74,7 +74,7 @@ export async function runAccount(
   up({ state: "busy", phase: "loading session", party: acc.bundle.partyId?.slice(-6) ?? "" });
   let session: Session;
   try {
-    session = Session.create(cfg.apiBase, acc.bundle, acc.password, acc.persist);
+    session = Session.create(cfg.apiBase, acc.bundle, acc.password, acc.persist, acc.proxy);
     summary.partyId = session.partyId;
     up({ party: session.partyId.slice(-6), phase: "refreshing token" });
     await session.ensureFresh();

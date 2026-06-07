@@ -22,10 +22,12 @@ const accountSchema = z.object({
   name: z.string().min(1),
   bundle: z.string().min(1), // path to session bundle json
   passwordFile: z.string().min(1), // path to file holding wallet password
+  proxy: z.string().optional(), // per-account proxy override
 });
 
 const configSchema = z.object({
   apiBase: z.string().url().default("https://api.kairo.ag"),
+  proxy: z.string().optional(), // global proxy (http://user:pass@host:port); per-account overrides
   swapAmountCC: z.number().positive().default(10),
   roundTrip: z.boolean().default(true),
   dailySpendCapCC: z.number().positive().default(100),

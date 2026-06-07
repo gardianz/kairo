@@ -10,23 +10,26 @@ export interface ResolvedAccount {
   name: string;
   bundle: SessionBundle;
   password: string;
+  proxy?: string;
   persist: PersistFn;
 }
 
-// accounts.json format: [ { "name": "...", "password": "...", "bundle": { ... } } ]
+// accounts.json format: [ { "name", "password", "bundle", "proxy"? } ]
 interface InlineAccount {
   name: string;
   password: string;
   bundle: SessionBundle;
+  proxy?: string;
 }
 
-function loadInline(path: string): ResolvedAccount[] {
+function loadInline(path: string, fallbackProxy?: string): ResolvedAccount[] {
   const list = JSON.parse(readFileSync(path, "utf8")) as InlineAccount[];
   if (!Array.isArray(list)) throw new Error(`${path} must be a JSON array`);
   return list.map((a) => ({
     name: a.name,
     bundle: a.bundle,
     password: a.password,
+    proxy: a.proxy ?? fallbackProxy,
     persist: (updated: SessionBundle) => {
       const current = JSON.parse(readFileSync(path, "utf8")) as InlineAccount[];
       const i = current.findIndex((x) => x.name === a.name);
@@ -38,13 +41,17 @@ function loadInline(path: string): ResolvedAccount[] {
   }));
 }
 
-function loadFileBased(acc: { name: string; bundle: string; passwordFile: string }): ResolvedAccount {
+function loadFileBased(
+  acc: { name: string; bundle: string; passwordFile: string; proxy?: string },
+  fallbackProxy?: string,
+): ResolvedAccount {
   const bundle = JSON.parse(readFileSync(acc.bundle, "utf8")) as SessionBundle;
   const password = readFileSync(acc.passwordFile, "utf8").trim();
   return {
     name: acc.name,
     bundle,
     password,
+    proxy: acc.proxy ?? fallbackProxy,
     persist: (updated: SessionBundle) => writeFileSync(acc.bundle, JSON.stringify(updated, null, 2)),
   };
 }
@@ -52,10 +59,10 @@ function loadFileBased(acc: { name: string; bundle: string; passwordFile: string
 export function resolveAccounts(cfg: Config): ResolvedAccount[] {
   const out: ResolvedAccount[] = [];
   if (cfg.accountsFile && existsSync(cfg.accountsFile)) {
-    out.push(...loadInline(cfg.accountsFile));
+    out.push(...loadInline(cfg.accountsFile, cfg.proxy));
   }
   for (const acc of cfg.accounts ?? []) {
-    out.push(loadFileBased(acc));
+    out.push(loadFileBased(acc, cfg.proxy));
   }
   if (out.length === 0) {
     throw new Error(

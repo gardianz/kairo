@@ -1,6 +1,11 @@
 # Copy to config.yaml and edit. config.yaml is gitignored.
 apiBase: "https://api.kairo.ag"
 
+# Proxy (REQUIRED if your server is in a blocked country, e.g. Singapore -> 403).
+# Global default; each account in accounts.json can override with its own "proxy".
+# Format: http://user:pass@host:port  or  http://host:port
+# proxy: "http://user:pass@1.2.3.4:8080"
+
 swapAmountCC: 11          # value per swap (>= quest threshold 10, +1 buffer so never borderline)
 roundTrip: true           # swap back after each swap to recover holdings
 dailySpendCapCC: 100      # max total CC-value swapped per run per account

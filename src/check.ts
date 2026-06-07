@@ -28,7 +28,7 @@ export async function checkAccounts(
     const r: CheckResult = { name: acc.name, ok: false, partyTail: "", bal: "-", quests: "-" };
     dash?.set(acc.name, { state: "busy", phase: "logging in", party: acc.bundle.partyId?.slice(-6) ?? "" });
     try {
-      const session = Session.create(cfg.apiBase, acc.bundle, acc.password, acc.persist);
+      const session = Session.create(cfg.apiBase, acc.bundle, acc.password, acc.persist, acc.proxy);
       r.partyTail = session.partyId.slice(-6);
       await session.ensureFresh();
       const [balances, quests, swaps] = await Promise.all([

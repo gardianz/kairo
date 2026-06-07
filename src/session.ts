@@ -3,6 +3,7 @@
 import type { SessionBundle } from "./types.ts";
 import { decryptSecret, signHash, verifySecret } from "./crypto.ts";
 import { KairoApi } from "./api.ts";
+import { makeDispatcher } from "./proxy.ts";
 
 function jwtExp(token: string): number {
   try {
@@ -24,14 +25,20 @@ export class Session {
   private readonly secret: string;
   private readonly persist?: PersistFn;
 
-  private constructor(apiBase: string, bundle: SessionBundle, secret: string, persist?: PersistFn) {
+  private constructor(
+    apiBase: string,
+    bundle: SessionBundle,
+    secret: string,
+    persist?: PersistFn,
+    proxy?: string,
+  ) {
     this.bundle = bundle;
     this.partyId = bundle.partyId || bundle.localStorage.partyId;
     this.authToken = bundle.localStorage.authToken;
     this.refreshToken = bundle.localStorage.refreshToken;
     this.secret = secret;
     this.persist = persist;
-    this.api = new KairoApi(apiBase, () => this.authToken);
+    this.api = new KairoApi(apiBase, () => this.authToken, makeDispatcher(proxy));
   }
 
   // Build from an in-memory bundle + password (verifies before returning).
@@ -40,6 +47,7 @@ export class Session {
     bundle: SessionBundle,
     password: string,
     persist?: PersistFn,
+    proxy?: string,
   ): Session {
     const cantonKey = bundle.indexedDB?.cantonNetwork?.stores?.storeCanton?.[0]?.cantonKey;
     if (!cantonKey) throw new Error("bundle missing cantonKey");
@@ -47,7 +55,7 @@ export class Session {
     if (!verifySecret(secret, bundle.localStorage.publicKey)) {
       throw new Error("derived pubkey != stored publicKey (bad password/bundle)");
     }
-    return new Session(apiBase, bundle, secret, persist);
+    return new Session(apiBase, bundle, secret, persist, proxy);
   }
 
   sign(preparedTransactionHash: string): string {
