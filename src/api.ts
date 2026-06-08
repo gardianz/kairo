@@ -130,11 +130,15 @@ export class KairoApi {
       method: "POST",
       dispatcher: this.dispatcher,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh: refreshToken }),
+      body: JSON.stringify({ refreshToken }), // API field is `refreshToken`
     });
-    if (!res.ok) throw new Error(`refresh-token failed: ${res.status}`);
+    if (!res.ok) {
+      const t = await res.text().catch(() => "");
+      throw new Error(`refresh-token failed: ${res.status} ${t.slice(0, 120)}`);
+    }
     const body = (await res.json()) as any;
     const d = body?.data?.data ?? body?.data;
-    return { token: d.token, refreshToken: d.refreshToken };
+    // keep the old refresh token if the server didn't rotate it
+    return { token: d.token, refreshToken: d.refreshToken ?? refreshToken };
   }
 }

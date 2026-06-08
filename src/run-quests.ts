@@ -81,7 +81,7 @@ export async function completeAllQuests(
   for (const s of summaries) {
     const recovered = (prev[s.account] ?? []).filter((id) => s.questsCompleted.includes(id));
     for (const id of recovered) {
-      await sendTelegram(cfg, `✅ *${s.account}*: pool terisi — *${questName(id)}* akhirnya selesai 🎉`);
+      await sendTelegram(cfg, `✅ ${s.account}: pool terisi — ${questName(id)} akhirnya selesai 🎉`);
     }
     nextMap[s.account] = s.liquiditySkipped;
   }

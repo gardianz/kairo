@@ -14,8 +14,8 @@ import type { Dashboard } from "./dashboard.ts";
 import { logger } from "./reporter.ts";
 
 const HELP = [
-  "🤖 *Kairo Bot*",
-  "/status — job status + accounts",
+  "🤖 Kairo Bot — perintah:",
+  "/status — status job + akun",
   "/check — saldo + status quest tiap akun",
   "/run — selesaikan semua quest (paralel)",
   "/stop — hentikan job berjalan",
@@ -40,32 +40,52 @@ export class TelegramControl {
 
   async send(text: string): Promise<void> {
     try {
-      await fetch(`${this.base}/sendMessage`, {
+      const res = await fetch(`${this.base}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: this.chatId, text, parse_mode: "Markdown" }),
+        body: JSON.stringify({ chat_id: this.chatId, text }), // plain text (no Markdown)
       });
+      if (!res.ok) {
+        const t = await res.text().catch(() => "");
+        logger.warn({ status: res.status, t }, "telegram send failed");
+        this.dash?.addLog("TG", `kirim gagal ${res.status}`, "error");
+      }
     } catch (err) {
-      logger.warn({ err }, "telegram send failed");
+      logger.warn({ err }, "telegram send error");
+      this.dash?.addLog("TG", "kirim error (jaringan)", "error");
     }
   }
 
   async start(): Promise<void> {
     logger.info("telegram control started");
-    await this.send(HELP);
+    // Ensure no webhook is set, otherwise getUpdates returns 409 and nothing works.
+    await fetch(`${this.base}/deleteWebhook?drop_pending_updates=false`).catch(() => {});
+    this.dash?.addLog("TG", "polling Telegram aktif — kirim /help", "info");
+    await this.send("🤖 Kairo bot online. " + HELP);
     for (;;) {
       try {
         const res = await fetch(`${this.base}/getUpdates?timeout=30&offset=${this.offset}`);
-        const body = await res.json();
+        if (!res.ok) {
+          const t = await res.text().catch(() => "");
+          this.dash?.addLog("TG", `getUpdates ${res.status}: ${t.slice(0, 50)}`, "error");
+          await new Promise((r) => setTimeout(r, 3000));
+          continue;
+        }
+        const body = (await res.json()) as any;
         for (const u of body.result ?? []) {
           this.offset = u.update_id + 1;
           const msg = u.message;
           if (!msg?.text) continue;
-          if (String(msg.chat?.id) !== this.chatId) continue; // authorize
+          if (String(msg.chat?.id) !== String(this.chatId)) {
+            // surface the mismatch so the user can fix chatId in config
+            this.dash?.addLog("TG", `chatId ditolak: ${msg.chat?.id} (config ${this.chatId})`, "error");
+            continue;
+          }
           await this.handle(msg.text.trim());
         }
       } catch (err) {
         logger.warn({ err }, "getUpdates failed");
+        this.dash?.addLog("TG", "getUpdates error (jaringan)", "error");
         await new Promise((r) => setTimeout(r, 3000));
       }
     }
@@ -81,7 +101,7 @@ export class TelegramControl {
         break;
       case "/status":
         await this.send(
-          this.running ? "🟢 Job *berjalan*. /stop untuk hentikan." : "⚪ Idle. /run untuk mulai.",
+          this.running ? "🟢 Job berjalan. /stop untuk hentikan." : "⚪ Idle. /run untuk mulai.",
         );
         break;
       case "/check":
@@ -118,11 +138,11 @@ export class TelegramControl {
     }
     const lines = res.map((r) =>
       r.ok
-        ? `✅ *${r.name}*  quest ${r.quests} · ${r.swaps} sw 24h\n   \`${r.bal}\``
-        : `❌ *${r.name}* — ${r.error}`,
+        ? `✅ ${r.name}  quest ${r.quests} · ${r.swaps} sw 24h\n   ${r.bal}`
+        : `❌ ${r.name} — ${r.error}`,
     );
     const ok = res.filter((r) => r.ok).length;
-    await this.send(`📊 *Accounts ${ok}/${res.length} online*\n\n` + lines.join("\n"));
+    await this.send(`📊 Accounts ${ok}/${res.length} online\n\n` + lines.join("\n"));
   }
 
   private async doRun(): Promise<void> {
@@ -142,7 +162,7 @@ export class TelegramControl {
       });
       const lines = sums.map((s) => {
         const st = s.aborted ? `⛔ ${s.aborted}` : s.questsRemaining.length ? "⚠️ partial" : "✅ done";
-        return `*${s.account}*: ${st} (quest ${s.questsCompleted.length}, swap ${s.swapsSucceeded})`;
+        return `${s.account}: ${st} (quest ${s.questsCompleted.length}, swap ${s.swapsSucceeded})`;
       });
       await this.send("🏁 Selesai:\n" + lines.join("\n"));
     } catch (err) {
